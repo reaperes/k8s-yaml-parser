@@ -1,0 +1,168 @@
+---
+# Source: kubewatch/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: kubewatch
+    chart: kubewatch-0.8.2
+    heritage: "Tiller"
+    release: "open-cat"
+  name: open-cat-kubewatch-config
+data:
+  .kubewatch.yaml: |
+    handler:
+      slack:
+        channel: XXXX
+        enabled: true
+        token: XXXX
+        
+    resource:
+      daemonset: false
+      deployment: true
+      job: false
+      persistentvolume: false
+      pod: true
+      replicaset: false
+      replicationcontroller: false
+      services: false
+      
+    namespace: ""
+---
+# Source: kubewatch/templates/servieaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: kubewatch
+    chart: kubewatch-0.8.2
+    heritage: Tiller
+    release: open-cat
+  name: open-cat-kubewatch
+---
+# Source: kubewatch/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app: kubewatch
+    chart: kubewatch-0.8.2
+    heritage: Tiller
+    release: open-cat
+  name: open-cat-kubewatch
+rules:
+  - apiGroups:
+      - ""
+    resources:
+    - pods
+    - namespaces
+    - services
+    - deployments
+    - replicationcontrollers
+    - replicasets
+    - daemonsets
+    - persistentvolumes
+    verbs:
+    - list
+    - watch
+    - get
+  - apiGroups:
+    - apps
+    resources:
+    - daemonsets
+    - deployments
+    - deployments/scale
+    - replicasets
+    - replicasets/scale
+    - statefulsets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - extensions
+    resources:
+    - daemonsets
+    - deployments
+    - deployments/scale
+    - replicasets
+    - replicasets/scale
+    - replicationcontrollers/scale
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - batch
+    resources:
+    - cronjobs
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+---
+# Source: kubewatch/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app: kubewatch
+    chart: kubewatch-0.8.2
+    heritage: Tiller
+    release: open-cat
+  name: open-cat-kubewatch
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: open-cat-kubewatch
+subjects:
+  - kind: ServiceAccount
+    name: open-cat-kubewatch
+    namespace: default
+---
+# Source: kubewatch/templates/deployment.yaml
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  labels:
+    app: kubewatch
+    chart: kubewatch-0.8.2
+    heritage: "Tiller"
+    release: "open-cat"
+  name: open-cat-kubewatch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubewatch
+      release: open-cat
+  template:
+    metadata:
+      annotations:
+        checksum/config-map: c7c8d6041ad2ce1637ed8de819dc77e62de69489c4e9102899b364a8d2490ce7
+      labels:
+        app: kubewatch
+        release: "open-cat"
+        chart: kubewatch-0.8.2
+    spec:      
+      containers:
+      - name: kubewatch
+        image: docker.io/bitnami/kubewatch:0.0.4-debian-9-r269
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: kubewatch-config-map
+          mountPath: /opt/bitnami/kubewatch/.kubewatch.yaml
+          subPath: .kubewatch.yaml
+        resources:
+          {}
+          
+      serviceAccountName: open-cat-kubewatch
+      tolerations:
+        []
+        
+      restartPolicy: Always
+      volumes:
+      - name: kubewatch-config-map
+        configMap:
+          name: open-cat-kubewatch-config

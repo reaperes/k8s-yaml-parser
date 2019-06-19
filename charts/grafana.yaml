@@ -1,0 +1,436 @@
+---
+# lazy-ibex-grafana-test
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lazy-ibex-grafana-test
+  labels:
+    app: lazy-ibex-grafana
+    chart: "grafana-3.4.2"
+    heritage: "Tiller"
+    release: "lazy-ibex"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: lazy-ibex-grafana-test
+  initContainers:
+    - name: test-framework
+      image: "dduportal/bats:0.4.0"
+      command:
+      - "bash"
+      - "-c"
+      - |
+        set -ex
+        # copy bats to tools dir
+        cp -R /usr/local/libexec/ /tools/bats/
+      volumeMounts:
+      - mountPath: /tools
+        name: tools
+  containers:
+    - name: lazy-ibex-test
+      image: "dduportal/bats:0.4.0"
+      command: ["/tools/bats/bats", "-t", "/tests/run.sh"]
+      volumeMounts:
+        - mountPath: /tests
+          name: tests
+          readOnly: true
+        - mountPath: /tools
+          name: tools
+  volumes:
+  - name: tests
+    configMap:
+      name: lazy-ibex-grafana-test
+  - name: tools
+    emptyDir: {}
+  restartPolicy: Never
+MANIFEST:
+
+---
+# Source: grafana/templates/podsecuritypolicy.yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    # Default set from Docker, without DAC_OVERRIDE or CHOWN
+    - FOWNER
+    - FSETID
+    - KILL
+    - SETGID
+    - SETUID
+    - SETPCAP
+    - NET_BIND_SERVICE
+    - NET_RAW
+    - SYS_CHROOT
+    - MKNOD
+    - AUDIT_WRITE
+    - SETFCAP
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'RunAsAny'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: false
+---
+# Source: grafana/templates/tests/test-podsecuritypolicy.yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: lazy-ibex-grafana-test
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+spec:
+  allowPrivilegeEscalation: true
+  privileged: false
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  fsGroup:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - projected
+  - secret
+---
+# Source: grafana/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    release: lazy-ibex
+    heritage: Tiller
+type: Opaque
+data:
+  admin-user: "YWRtaW4="
+  admin-password: "OXNIYUJCQWdmdXROclEyUTZ0cUN3eXZOelJNMkFJS3dod05pbGtqZg=="
+  ldap-toml: ""
+---
+# Source: grafana/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    release: lazy-ibex
+    heritage: Tiller
+data:
+  grafana.ini: |
+    [analytics]
+    check_for_updates = true
+    [grafana_net]
+    url = https://grafana.net
+    [log]
+    mode = console
+    [paths]
+    data = /var/lib/grafana/data
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    provisioning = /etc/grafana/provisioning
+---
+# Source: grafana/templates/tests/test-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lazy-ibex-grafana-test
+  labels:
+    app: lazy-ibex-grafana
+    chart: "grafana-3.4.2"
+    heritage: "Tiller"
+    release: "lazy-ibex"
+data:
+  run.sh: |-
+    @test "Test Health" {
+      url="http://lazy-ibex-grafana/api/health"
+
+      code=$(curl -s -o /dev/null -I -w "%{http_code}" $url)
+      [ "$code" == "200" ]
+    }
+---
+# Source: grafana/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+  name: lazy-ibex-grafana
+  namespace: default
+---
+# Source: grafana/templates/tests/test-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+  name: lazy-ibex-grafana-test
+---
+# Source: grafana/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    release: lazy-ibex
+    heritage: Tiller
+  name: lazy-ibex-grafana-clusterrole
+rules: []
+---
+# Source: grafana/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: lazy-ibex-grafana-clusterrolebinding
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    release: lazy-ibex
+    heritage: Tiller
+subjects:
+  - kind: ServiceAccount
+    name: lazy-ibex-grafana
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: lazy-ibex-grafana-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: grafana/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+rules:
+- apiGroups:      ['extensions']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [lazy-ibex-grafana]
+---
+# Source: grafana/templates/tests/test-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lazy-ibex-grafana-test
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+rules:
+- apiGroups:      ['policy']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [lazy-ibex-grafana-test]
+---
+# Source: grafana/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lazy-ibex-grafana
+subjects:
+- kind: ServiceAccount
+  name: lazy-ibex-grafana
+  namespace: default
+---
+# Source: grafana/templates/tests/test-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lazy-ibex-grafana-test
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    heritage: Tiller
+    release: lazy-ibex
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lazy-ibex-grafana-test
+subjects:
+- kind: ServiceAccount
+  name: lazy-ibex-grafana-test
+  namespace: default
+---
+# Source: grafana/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    release: lazy-ibex
+    heritage: Tiller
+spec:
+  type: ClusterIP
+  ports:
+    - name: service
+      port: 80
+      protocol: TCP
+      targetPort: 3000
+
+  selector:
+    app: grafana
+    release: lazy-ibex
+---
+# Source: grafana/templates/deployment.yaml
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: lazy-ibex-grafana
+  namespace: default
+  labels:
+    app: grafana
+    chart: grafana-3.4.2
+    release: lazy-ibex
+    heritage: Tiller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+      release: lazy-ibex
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: grafana
+        release: lazy-ibex
+      annotations:
+        checksum/config: 8c3eee197e31a37698a2c4d1ec9f0dbce348ec535b35b4af20b83aa7bff13e29
+        checksum/dashboards-json-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/sc-dashboard-provider-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/secret: 1083a1f026d00713f264eac05b9695cb20080ebc73d9c18c60d4757ee35924ac
+    spec:
+      serviceAccountName: lazy-ibex-grafana
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        
+      containers:
+        - name: grafana
+          image: "grafana/grafana:6.2.2"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/grafana.ini"
+              subPath: grafana.ini
+            - name: ldap
+              mountPath: "/etc/grafana/ldap.toml"
+              subPath: ldap.toml
+            - name: storage
+              mountPath: "/var/lib/grafana"
+          ports:
+            - name: service
+              containerPort: 80
+              protocol: TCP
+            - name: grafana
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: lazy-ibex-grafana
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lazy-ibex-grafana
+                  key: admin-password
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+            
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            
+          resources:
+            {}
+            
+      volumes:
+        - name: config
+          configMap:
+            name: lazy-ibex-grafana
+        - name: ldap
+          secret:
+            secretName: lazy-ibex-grafana
+            items:
+              - key: ldap-toml
+                path: ldap.toml
+        - name: storage
+          emptyDir: {}

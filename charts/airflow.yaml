@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: littering-panther-worker
+  labels:
+    app: airflow
+    component: worker
+    chart: airflow-2.8.8
+    release: littering-panther
+    heritage: Tiller
+spec:
+  serviceName: "littering-panther-worker"
+  updateStrategy:
+    ## Kill the workers as soon as possible, the scheduler will restart the failed job later
+    type: RollingUpdate
+  ## Use experimental burst mode for faster StatefulSet scaling
+  ##   https://github.com/kubernetes/kubernetes/commit/c2c5051adf096ffd48bf1dcf5b11cb47e464ecdd
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+      component: worker
+      release: littering-panther
+  template:
+    metadata:
+      annotations:
+        checksum/config-env: a1e58f1356072e4808dbdc8d8865b10a1b098c2b4f9318c16a310d516c66c31a
+        checksum/config-git-clone: b42038eaa82630309575f32e4806249d284dc7fd873e44e0f176285225fbb564
+        checksum/config-scripts: 67b2e73a64a249cdb276810deb779d03bbd30afd38e615234d8d5fab0d0bf1ff
+        checksum/secret-env: 1070b904d05b8931e0d4ce1f12b326bf5e78f9741dbf6236ad79cdca0c6754be
+      labels:
+        app: airflow
+        component: worker
+        release: littering-panther
+    spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: littering-panther
+      containers:
+        - name: airflow-worker
+          imagePullPolicy: IfNotPresent
+          image: "puckel/docker-airflow:1.10.2"
+          envFrom:
+            - configMapRef:
+                name: "littering-panther-env"
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: littering-panther-env
+                  key: postgresUser
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: littering-panther-env
+                  key: postgresPassword
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: littering-panther-env
+                  key: redisPassword
+          volumeMounts:
+            - name: scripts
+              mountPath: /usr/local/scripts
+          args:
+            - "bash"
+            - "-c"
+            - >
+              echo 'waiting 60s...' &&
+              sleep 60 &&
+              mkdir -p /usr/local/airflow/.local/bin &&
+              export PATH=/usr/local/airflow/.local/bin:$PATH &&
+              echo 'executing worker...' &&
+              airflow worker
+          ports:
+            - name: wlog
+              containerPort: 8793
+              protocol: TCP
+          resources:
+            {}
+
+      volumes:
+        - name: scripts
+          configMap:
+            name: littering-panther-scripts
+            defaultMode: 0755
+        - name: dags-data
+          emptyDir: {}

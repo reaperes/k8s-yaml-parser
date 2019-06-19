@@ -1,0 +1,118 @@
+---
+# Source: chartmuseum/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bulging-panther-chartmuseum
+  labels:
+    app: chartmuseum
+    chart: chartmuseum-2.3.1
+    heritage: "Tiller"
+    release: "bulging-panther"
+type: Opaque
+data:
+---
+# Source: chartmuseum/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: bulging-panther-chartmuseum
+  labels:
+    app: chartmuseum
+    chart: chartmuseum-2.3.1
+    heritage: "Tiller"
+    release: "bulging-panther"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: chartmuseum
+    release: "bulging-panther"
+---
+# Source: chartmuseum/templates/deployment.yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: bulging-panther-chartmuseum
+  annotations:
+    {}
+
+  labels:
+    app: chartmuseum
+    chart: chartmuseum-2.3.1
+    heritage: "Tiller"
+    release: "bulging-panther"
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      name: bulging-panther-chartmuseum
+      annotations:
+        {}
+
+      labels:
+        app: chartmuseum
+        release: "bulging-panther"
+    spec:
+      containers:
+      - name: chartmuseum
+        image: chartmuseum/chartmuseum:v0.8.2
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: "CHART_POST_FORM_FIELD_NAME"
+          value: "chart"
+        - name: "DISABLE_API"
+          value: "true"
+        - name: "DISABLE_METRICS"
+          value: "true"
+        - name: "LOG_JSON"
+          value: "true"
+        - name: "PROV_POST_FORM_FIELD_NAME"
+          value: "prov"
+        - name: "STORAGE"
+          value: "local"
+        args:
+        - --port=8080
+        - --storage-local-rootdir=/storage
+        ports:
+        - name: http
+          containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+
+        volumeMounts:
+        - mountPath: /storage
+          name: storage-volume
+      securityContext:
+        fsGroup: 1000
+
+      volumes:
+      - name: storage-volume
+        emptyDir: {}

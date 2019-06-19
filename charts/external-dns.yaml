@@ -1,0 +1,67 @@
+---
+# Source: external-dns/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: external-dns
+    chart: external-dns-1.7.9
+    heritage: Tiller
+    release: yucky-buffalo
+  name: yucky-buffalo-external-dns
+spec:
+  ports:
+    - port: 7979
+      protocol: TCP
+      targetPort: 7979
+      name: http
+  selector:
+    app: external-dns
+    release: yucky-buffalo
+  type: "ClusterIP"
+---
+# Source: external-dns/templates/deployment.yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: external-dns
+    heritage: Tiller
+    release: yucky-buffalo
+    chart: external-dns-1.7.9
+  name: yucky-buffalo-external-dns
+spec:
+  template:
+    metadata:
+      labels:
+        app: external-dns
+        heritage: Tiller
+        release: yucky-buffalo
+    spec:
+      containers:
+        - name: external-dns
+          image: "registry.opensource.zalan.do/teapot/external-dns:v0.5.14"
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - --log-level=info
+            - --policy=upsert-only
+            - --provider=aws
+            - --registry=txt
+            - --interval=1m
+            - --source=service
+            - --source=ingress
+
+
+
+          volumeMounts:
+          env:
+          - name: AWS_DEFAULT_REGION
+            value: us-east-1
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 7979
+          ports:
+            - containerPort: 7979
+      volumes:
+      serviceAccountName: "default"

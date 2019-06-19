@@ -1,0 +1,118 @@
+---
+# Source: hubot/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: knobby-wombat-hubot
+  labels:
+    app: hubot
+    chart: hubot-0.0.1
+    release: knobby-wombat
+    heritage: Tiller
+type: Opaque
+data:
+  HUBOT_SLACK_TOKEN:
+---
+# Source: hubot/templates/configmap-scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: knobby-wombat-hubot-scripts
+  labels:
+    app: hubot
+    chart: hubot-0.0.1
+    release: knobby-wombat
+    heritage: Tiller
+data:
+  health.coffee: |
+    # Description
+    #   A hubot script that exposes a health endpoint
+    module.exports = (robot) ->
+      robot.router.get '/health', (req, res) -> res.status(200).end()
+---
+# Source: hubot/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: knobby-wombat-hubot
+  labels:
+    app: hubot
+    chart: hubot-0.0.1
+    release: knobby-wombat
+    heritage: Tiller
+data:
+  {}
+---
+# Source: hubot/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: knobby-wombat-hubot
+  labels:
+    app: hubot
+    chart: hubot-0.0.1
+    release: knobby-wombat
+    heritage: Tiller
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: hubot
+    release: knobby-wombat
+---
+# Source: hubot/templates/deployment.yaml
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: knobby-wombat-hubot
+  labels:
+    app: hubot
+    chart: hubot-0.0.1
+    release: knobby-wombat
+    heritage: Tiller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hubot
+      release: knobby-wombat
+  template:
+    metadata:
+      labels:
+        app: hubot
+        release: knobby-wombat
+    spec:
+      volumes:
+        - name: knobby-wombat-hubot-scripts
+          configMap:
+            name: knobby-wombat-hubot-scripts
+      containers:
+        - name: hubot
+          image: "minddocdev/hubot:0.1.9"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          volumeMounts:
+            - name: knobby-wombat-hubot-scripts
+              mountPath: /minddocbot/scripts
+          envFrom:
+            - secretRef:
+                name: knobby-wombat-hubot
+            - configMapRef:
+                name: knobby-wombat-hubot
+          resources:
+            {}

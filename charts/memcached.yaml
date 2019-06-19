@@ -1,0 +1,98 @@
+---
+# Source: memcached/templates/pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: giggly-orangutan-memcached
+  labels:
+    app: giggly-orangutan-memcached
+    chart: "memcached-2.8.2"
+    release: "giggly-orangutan"
+    heritage: "Tiller"
+spec:
+  selector:
+    matchLabels:
+      app: giggly-orangutan-memcached
+      chart: "memcached-2.8.2"
+      release: "giggly-orangutan"
+      heritage: "Tiller"
+  minAvailable: 2
+---
+# Source: memcached/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: giggly-orangutan-memcached
+  labels:
+    app: giggly-orangutan-memcached
+    chart: "memcached-2.8.2"
+    release: "giggly-orangutan"
+    heritage: "Tiller"
+  annotations:
+    {}
+    
+spec:
+  clusterIP: None
+  ports:
+  - name: memcache
+    port: 11211
+    targetPort: memcache
+  selector:
+    app: giggly-orangutan-memcached
+---
+# Source: memcached/templates/statefulset.yaml
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: giggly-orangutan-memcached
+  labels:
+    app: giggly-orangutan-memcached
+    chart: "memcached-2.8.2"
+    release: "giggly-orangutan"
+    heritage: "Tiller"
+spec:
+  serviceName: giggly-orangutan-memcached
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: giggly-orangutan-memcached
+        chart: "memcached-2.8.2"
+        release: "giggly-orangutan"
+        heritage: "Tiller"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app:  giggly-orangutan-memcached
+                release: "giggly-orangutan"
+      containers:
+      - name: giggly-orangutan-memcached
+        image: memcached:1.5.12-alpine
+        imagePullPolicy: ""
+        command:
+        - memcached
+        - -m 64
+        - -o
+        - modern
+        - -v
+        ports:
+        - name: memcache
+          containerPort: 11211
+        livenessProbe:
+          tcpSocket:
+            port: memcache
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: memcache
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi

@@ -1,0 +1,103 @@
+---
+# Source: elasticsearch-curator/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ugly-cow-elasticsearch-curator-config
+  labels:
+    app: elasticsearch-curator
+    chart: elasticsearch-curator-1.5.0
+    release: ugly-cow
+    heritage: Tiller
+data:
+  action_file.yml:   |-
+    ---
+    actions:
+      1:
+        action: delete_indices
+        description: "Clean up ES by deleting old indices"
+        options:
+          timeout_override:
+          continue_if_exception: False
+          disable_action: False
+          ignore_empty_list: True
+        filters:
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%Y.%m.%d'
+          unit: days
+          unit_count: 7
+          field:
+          stats_result:
+          epoch:
+          exclude: False
+
+  config.yml:   |-
+    ---
+    client:
+      hosts:
+        - CHANGEME.host
+      port: 9200
+      # url_prefix:
+      # use_ssl: True
+      # certificate:
+      # client_cert:
+      # client_key:
+      # ssl_no_validate: True
+      # http_auth:
+      # timeout: 30
+      # master_only: False
+    # logging:
+    #   loglevel: INFO
+    #   logfile:
+    #   logformat: default
+    #   blacklist: ['elasticsearch', 'urllib3']
+---
+# Source: elasticsearch-curator/templates/cronjob.yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: ugly-cow-elasticsearch-curator
+  labels:
+    app: elasticsearch-curator
+    chart: elasticsearch-curator-1.5.0
+    release: ugly-cow
+    heritage: Tiller
+spec:
+  schedule: "0 1 * * *"
+  jobTemplate:
+    metadata:
+      labels:
+        app: elasticsearch-curator
+        release: ugly-cow
+    spec:
+      template:
+        metadata:
+          labels:
+            app: elasticsearch-curator
+            release: ugly-cow
+        spec:
+          volumes:
+            - name: config-volume
+              configMap:
+                name: ugly-cow-elasticsearch-curator-config
+          restartPolicy: Never
+          containers:
+            - name: elasticsearch-curator
+              image: "quay.io/pires/docker-elasticsearch-curator:5.5.4"
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /etc/es-curator
+
+              command:
+                - curator
+
+              args: [ "--config", "/etc/es-curator/config.yml", "/etc/es-curator/action_file.yml" ]
+              env:
+              resources:
+                {}
+
+          securityContext:
+            runAsUser: 16

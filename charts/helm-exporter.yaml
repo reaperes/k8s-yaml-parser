@@ -1,0 +1,78 @@
+---
+# Source: helm-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: helm-exporter
+    helm.sh/chart: helm-exporter-0.3.0
+    app.kubernetes.io/instance: right-manatee
+    app.kubernetes.io/managed-by: Tiller
+  name: right-manatee-helm-exporter
+---
+# Source: helm-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: right-manatee-helm-exporter
+  labels:
+    app.kubernetes.io/name: helm-exporter
+    helm.sh/chart: helm-exporter-0.3.0
+    app.kubernetes.io/instance: right-manatee
+    app.kubernetes.io/managed-by: Tiller
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 9571
+      targetPort: http
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: helm-exporter
+    app.kubernetes.io/instance: right-manatee
+---
+# Source: helm-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-manatee-helm-exporter
+  labels:
+    app.kubernetes.io/name: helm-exporter
+    helm.sh/chart: helm-exporter-0.3.0
+    app.kubernetes.io/instance: right-manatee
+    app.kubernetes.io/managed-by: Tiller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: helm-exporter
+      app.kubernetes.io/instance: right-manatee
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: helm-exporter
+        app.kubernetes.io/instance: right-manatee
+    spec:
+      containers:
+        - name: helm-exporter
+          image: "sstarcher/helm-exporter:0.4.0"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9571
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {}
+            
+      serviceAccountName: right-manatee-helm-exporter

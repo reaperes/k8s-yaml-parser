@@ -1,0 +1,18 @@
+# Source: acs-engine-autoscaler/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fuzzy-waterbuffalo-acs-engine-autoscaler
+  labels:
+    app: acs-engine-autoscaler
+    heritage: "Tiller"
+    release: "fuzzy-waterbuffalo"
+    chart: acs-engine-autoscaler-2.2.2
+type: Opaque
+data:
+  azure-sp-app-id: "TUlTU0lORw=="
+  azure-sp-secret: "TUlTU0lORw=="
+  azure-sp-tenant-id: "TUlTU0lORw=="
+  kubeconfig-private-key: "TUlTU0lORw=="
+  client-private-key: "TUlTU0lORw=="
+  ca-private-key: "TUlTU0lORw=="

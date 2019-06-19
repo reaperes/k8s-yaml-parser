@@ -1,0 +1,185 @@
+---
+# Source: aerospike/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lovely-donkey-aerospike
+  labels:
+    app: aerospike
+    chart: aerospike-0.2.8
+    release: lovely-donkey
+    heritage: Tiller
+data:
+  aerospike.conf: |
+    # aerospike configuration
+        #default config file
+    service {
+        user root
+        group root
+        paxos-protocol v5
+        paxos-single-replica-limit 1
+        pidfile /var/run/aerospike/asd.pid
+        service-threads 4
+        transaction-queues 4
+        transaction-threads-per-queue 4
+        proto-fd-max 15000
+    }
+
+    logging {
+        file /var/log/aerospike/aerospike.log {
+            context any info
+        }
+
+        console {
+            context any info
+        }
+    }
+
+    network {
+        service {
+            address any
+            port 3000
+        }
+
+        heartbeat {
+            address any
+            interval 150
+
+        mesh-seed-address-port lovely-donkey-aerospike-0.lovely-donkey-aerospike-mesh 3002
+            mode mesh
+            port 3002
+            timeout 20
+            protocol v3
+        }
+
+        fabric {
+            port 3001
+        }
+
+        info {
+            port 3003
+        }
+    }
+
+    namespace test {
+        replication-factor 2
+        memory-size 1G
+        default-ttl 5d
+        storage-engine device {
+            file /opt/aerospike/data/test.dat
+            filesize 4G
+        }
+    }
+---
+# Source: aerospike/templates/mesh-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: lovely-donkey-aerospike-mesh
+  labels:
+    app: aerospike
+    chart: aerospike-0.2.8
+    release: lovely-donkey
+    heritage: Tiller
+  annotations:
+    # deprecation in 1.10, supported until at least 1.13,  breaks peer-finder/kube-dns if not used
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  # deprecates service.alpha.kubernetes.io/tolerate-unready-endpoints as of 1.10? see: kubernetes/kubernetes#49239 Fixed in 1.11 as of #63742
+  publishNotReadyAddresses: true
+  clusterIP: None
+  type: ClusterIP
+  ports:
+    - port: 3002
+      protocol: TCP
+      name: aerospike-mesh
+  selector:
+    app: aerospike
+    release: lovely-donkey
+---
+# Source: aerospike/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: lovely-donkey-aerospike
+  labels:
+    app: aerospike
+    chart: aerospike-0.2.8
+    release: lovely-donkey
+    heritage: Tiller
+  annotations:
+    # deprecation in 1.10, supported until at least 1.13,  breaks peer-finder/kube-dns if not used
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  # deprecates service.alpha.kubernetes.io/tolerate-unready-endpoints as of 1.10? see: kubernetes/kubernetes#49239 Fixed in 1.11 as of #63742
+  publishNotReadyAddresses: true
+
+  clusterIP: "None"
+
+  type: ClusterIP
+  ports:
+    - port: 3000
+      protocol: TCP
+      name: aerospike-client
+    - port: 3002
+      protocol: TCP
+      name: aerospike-mesh
+  selector:
+    app: aerospike
+    release: lovely-donkey
+---
+# Source: aerospike/templates/statefulset.yaml
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: lovely-donkey-aerospike
+  labels:
+    app: aerospike
+    chart: aerospike-0.2.8
+    release: lovely-donkey
+    heritage: Tiller
+spec:
+  serviceName: lovely-donkey-aerospike-mesh
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: aerospike
+        release: lovely-donkey
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: lovely-donkey-aerospike
+        image: "aerospike/aerospike-server:4.5.0.5"
+        imagePullPolicy: IfNotPresent
+
+
+        ports:
+        - containerPort: 3000
+          name: aero-clients
+        - containerPort: 3002
+          name: aero-mesh
+        - containerPort: 3003
+          name: aero-info
+        readinessProbe:
+          tcpSocket:
+              port: 3000
+          initialDelaySeconds: 15
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/aerospike
+        resources:
+          {}
+
+      nodeSelector:
+        {}
+
+      volumes:
+      - name: config-volume
+        configMap:
+          name: lovely-donkey-aerospike
+          items:
+          - key: aerospike.conf
+            path: aerospike.conf
+  volumeClaimTemplates:
